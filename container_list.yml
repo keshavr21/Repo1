@@ -1,0 +1,86 @@
+---
+- name: Get container ids
+  shell: docker ps | grep -v cadvisor | awk '{print $1}' | sed -n '1!p'
+  register: container_id
+  tags:
+    - runtime
+
+- name: Get containers name
+  shell: docker inspect {{ item }} | grep com.docker.swarm.service.name | awk '{print $2}' | sed -e 's/"//g' -e 's/,//g'
+  with_items: "{{ container_id.stdout_lines }}"
+  register: container_name
+  tags:
+    - runtime
+
+- name: Check Installed Java
+  shell: docker exec {{ item }} java -version 2>&1 | awk '/Runtime/{print $$2}'
+  with_items: "{{ container_id.stdout_lines }}"
+  register: java_out
+  tags:
+    - runtime
+
+# - name: Container Name
+#   debug: 
+#     msg: "{{ container_name.results|map(attribute='stdout')|list }}"
+
+# - name: Java output
+#   debug: 
+#     msg: "{{ java_out.results|map(attribute='stdout')|list }}"
+
+- name: create csv file
+  become: no
+  file:
+    path: java_list.csv
+    state: touch
+    mode: '0755'
+  delegate_to: localhost
+  tags:
+    - runtime
+
+- name: Generate report
+  become: no
+  lineinfile:
+    dest: java_list.csv
+    line: "{{ item.0 }},{{ item.1 }}"
+    insertafter: EOF
+  with_together:
+     - "{{ container_name.results|map(attribute='stdout')|list }}"
+     - "{{ java_out.results|map(attribute='stdout')|list }}"
+  delegate_to: localhost
+  tags:
+    - runtime
+
+- name: Get uniq service name
+  become: no
+  shell: sort -u -t, -k1,1 java_list.csv > java_all.csv
+  delegate_to: localhost
+  tags:
+    - runtime
+
+- name: Get corretto service name
+  become: no
+  shell: grep "Corretto" java_all.csv > corretto.csv
+  delegate_to: localhost
+  tags:
+    - runtime
+
+- name: Get non corretto service name
+  become: no
+  shell: grep -v "Corretto" java_all.csv > non_corretto.csv
+  delegate_to: localhost
+  tags:
+    - runtime
+
+- name: adding header to csv file
+  become: no
+  lineinfile:
+    path: "{{ item }}"
+    insertbefore: BOF
+    line: "Service Name, Installed JAVA"
+  with_items:
+     - java_all.csv
+     - corretto.csv
+     - non_corretto.csv
+  delegate_to: localhost
+  tags:
+    - runtime
