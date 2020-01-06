@@ -1,0 +1,174 @@
+
+ROOT_BUD_PATH="j:\\Corona\\BasicUpdateDisk\\Corona_BUD_${TAX_TABLE_NUMBER}"
+RUN_DATE = "${DATE_VAL}"
+DIR_LIST = []
+
+
+def populateQBDirsList(){
+    fileDirList = findFiles(glob: '**/*.qbc')
+    for(index=0; index < fileDirList.size(); index++){
+        dir_name = java.net.URLEncoder.encode(fileDirList[index].path, "UTF-8").replace('%5C', ' ').split()[1]
+        if(! DIR_LIST.contains(dir_name)){
+            DIR_LIST.add(dir_name)
+        }
+    } 
+}
+
+def addRowInFile(fileName){
+    if(fileName =~ 'payro'){
+        header = header + """
+            <Channel Name="Payroll"    Alias="_PAYROLL"      File="${fileName}"  Version="${TAX_TABLE_NUMBER}" Description="TT version"  Value="1"/> """
+    } else if(fileName =~ 'newfe'){
+        header = header + """
+            <Channel Name="New Features"   Alias="_NEWFEAT"   File="${fileName}"  Value="1"/>"""                                            
+    } else if(fileName =~ 'fview'){
+    header = header + """
+            <Channel Name="Forms Viewer"   Alias="_FVIEWER"  File="${fileName}"  Value="1"/>"""                                            
+    } else if(fileName =~ 'state'){
+        header = header + """
+            <Channel Name="State Forms"    Alias="_STATEFO"  File="${fileName}"  Value="1"/>"""                                            
+    } else if(fileName =~ 'fedfo'){
+        header = header + """
+            <Channel Name="Federal Forms"  Alias="_FEDFORM"  File="${fileName}"  Value="1"/>"""                                            
+    } else if(fileName =~ 'patch'){
+        header = header + """
+            <Channel Name="Maintenance Release"    Alias="_PATCH"    File="${fileName}"  Value="1"/>"""                                            
+    }    
+}
+
+pipeline{
+    agent { label 'Payroll-win7-3' }
+    stages{
+        stage('Create new release folder'){
+            steps{
+                script{
+                    timestamps{
+                        dir("j:\\Corona\\BasicUpdateDisk"){
+                            bat """
+                                for /f "delims=" %%a in ('ls ^|grep Corona_BUD_ ^| tail -1') do set LAST_RELEASE_FOLDER=%%a
+                                echo "last oldest release :: %LAST_RELEASE_FOLDER%"
+                                for /f "delims=" %%b in ('echo %LAST_RELEASE_FOLDER% ^|tr -d [:digit:][:space:]') do set NEW_RELEASE_FOLDER=%%b${TAX_TABLE_NUMBER}
+                                echo "new release folder name :: %NEW_RELEASE_FOLDER%"
+                                echo "creating new release folder :"
+                                cp -r %LAST_RELEASE_FOLDER% %NEW_RELEASE_FOLDER%
+                            """
+                        }
+                    }
+                }
+            }
+        }
+        stage('update perforce'){
+            steps{
+                script{
+                    timestamps{
+                         dir("d:\\PayrollServices\\main\\BasicUpdateDisk\\install\\BasicDiskAutoRun"){
+                             bat """
+                                 set P4CLIENT=payroll_scm
+								 p4 sync d:/PayrollServices/main/BasicUpdateDisk/install/BasicDiskAutoRun/...#head
+							"""	 
+						}
+					}
+				}
+			}
+		}
+		stage('COPY updated files'){
+            steps{
+			   
+                script{
+                    timestamps{
+                          dir("d:\\PayrollServices\\main\\BasicUpdateDisk\\install"){
+						      bat"""
+                                 for /f "delims=" %%d in ('ls J:\\Corona\\BasicUpdateDisk\\ ^|  grep 'Corona_BUD_' ^|grep -v tmp ^|tail -1') do set CHANGE_FOLDER=%%d
+								 xcopy /y Intuit_QB_Payroll.gif J:\\Corona\\BasicUpdateDisk\\%CHANGE_FOLDER%\\B1
+								 xcopy /y Readme.html J:\\Corona\\BasicUpdateDisk\\%CHANGE_FOLDER%\\B1
+								 for /f "delims=" %%e in ('ls J:\\Corona\\BasicUpdateDisk\\%CHANGE_FOLDER%\\B1 ^| grep QB ^| grep -v Intuit_QB_Payroll.gif ^| sort ^| head -1') do set QB_FOLDER=%%e
+								 xcopy /y Intuit_QB_Payroll.gif J:\\Corona\\BasicUpdateDisk\\%CHANGE_FOLDER%\\B1\\%QB_FOLDER%
+								 xcopy /y Newinfo.html J:\\Corona\\BasicUpdateDisk\\%CHANGE_FOLDER%\\B1\\%QB_FOLDER%
+							"""
+	 
+						}
+					}
+				}
+			}
+		}
+		stage('clean workspace'){
+		    steps{
+		        script{
+		            timestamps{
+		                 dir("d:\\payroll\\scm\\build\\makebud"){
+                             bat """
+                                 CLEAN_QBC.bat ${OCD_NUMBER} ${TAX_TABLE_NUMBER} B1
+								 
+        					"""	 
+        				}
+        			}
+        		}
+        	}
+        }
+		stage('copy qbc files from OCD'){
+		    steps{
+		        script{
+		            timestamps{
+		                 dir("d:\\payroll\\scm\\build\\makebud"){
+                             bat """
+								 GETQBC_LATEST.bat ${OCD_NUMBER} ${TAX_TABLE_NUMBER} B1
+								
+        					"""	 
+        				}
+        			}
+        		}
+        	}
+        }
+		stage('update qbc files from perforce'){
+		    steps{
+		        script{
+		            timestamps{
+		                 dir("d:\\payroll\\scm\\build\\makebud"){
+                             bat """
+								 UPDATEDQBC.bat ${OCD_NUMBER} ${TAX_TABLE_NUMBER} B1
+        					"""	 
+        				}
+        			}
+        		}
+        	}
+        }
+		stage('Create latest update XMl file'){
+            steps{
+                script{
+                    timestamps{
+                        header = """<BasicDiskUpdate Format="1.0">
+    <ChannelUpdates Date="${RUN_DATE}">"""
+                         dir("${ROOT_BUD_PATH}"){
+                            populateQBDirsList()                           
+                            for(counter=0; counter < DIR_LIST.size(); counter++){
+                                dir("B1\\${DIR_LIST[counter]}"){
+                                    header = header + """
+        <Product Release="${DIR_LIST[counter]}" Path="${DIR_LIST[counter]}\\">"""
+                                    fileList = findFiles(glob: '**/*.qbc')
+                                    for(fileIndex=0; fileIndex < fileList.size(); fileIndex++){
+                                        addRowInFile(fileList[fileIndex].name)
+                                    }   
+                                    header = header + """
+        </Product>"""
+                                }
+                            }
+                        }  
+                        header = header + """
+    </ChannelUpdates>
+</BasicDiskUpdate>   
+                    """  
+                        writeFile file: 'update3.dat', text: header
+                        // add copy or move command to copy/move this update3.dat file into ${ROOT_BUD_PATH} path
+                        bat """
+                            type update3.dat
+                            xcopy /y ${WORKSPACE}\\update3.dat ${ROOT_BUD_PATH}\\B1
+                            
+                        """
+                        
+                    }
+                }
+            }
+        }    
+	
+    }
+}		
