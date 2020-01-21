@@ -1,0 +1,8 @@
+ping url
+add cat /etc/hosts
+or add /etc/resolv.conf
+
+
+if authtication issue
+
+git config http.sslVerify false
