@@ -1,0 +1,12 @@
+---
+- hosts: all
+  tasks:
+  - name:
+    command: 
+    register: result
+  - name:
+    services: 
+      name: "{{ item }}"
+      state:
+    with_item: 
+      - "{{ result.stdout_lines }}"
