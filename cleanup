@@ -1,0 +1,89 @@
+
+
+
+
+pipeline{
+    agent {label "Bansaira"}
+    environment{
+        ROOT_DIR = "/home/ea/indfsqbscm01/scmdev/Build"
+    }
+    stages{
+        stage('Clean PG builds'){
+            steps{
+                timestamps{
+                    script{
+                        sh """
+                            echo> filesRemoved.txt
+                            ls ${ROOT_DIR} | grep "PG\$" | while read line
+                            do
+                                if [ -d ${ROOT_DIR}/\$line/pending ]
+                                then 
+                                    us=\$(ls ${ROOT_DIR}/\$line/pending|grep US|wc -l)
+                                    ca=\$(ls ${ROOT_DIR}/\$line/pending|grep CA|wc -l)
+                                    uk=\$(ls ${ROOT_DIR}/\$line/pending|grep UK|wc -l)
+                                    
+                                    if [ \$us -gt 3 ]
+                                      then 
+                                            dus=`expr \$us - 3`
+                                            ls -lrt ${ROOT_DIR}/\$line/pending | grep US|head -\$dus|  awk '{print \$NF}' | while read line1
+                                            do
+                                                echo ${ROOT_DIR}/\$line/pending/\$line1 >> filesRemoved.txt
+                                                sudo rm -rf ${ROOT_DIR}/\$line/pending/\$line1
+                                            done
+                                      fi
+                                
+                                      if [ \$uk -gt 3 ]
+                                      then
+                                            duk=`expr \$uk - 3`
+                                            ls -lrt ${ROOT_DIR}/\$line/pending | grep UK|head -\$duk|  awk '{print \$NF}' | while read line1
+                                                do
+                                                  echo ${ROOT_DIR}/\$line/pending/\$line1 >> filesRemoved.txt
+                                                  sudo rm -rf ${ROOT_DIR}/\$line/pending/\$line1
+                                            done
+                                      fi
+                                
+                                      if [ \$ca -gt 3 ]
+                                      then
+                                            dca=`expr \$ca - 3`
+                                            ls -lrt ${ROOT_DIR}/\$line/pending | grep CA|head -\$dca|  awk '{print \$NF}' | while read line1
+                                                do
+                                                  echo ${ROOT_DIR}/\$line/pending/\$line1 >> filesRemoved.txt
+                                                  sudo rm -rf ${ROOT_DIR}/\$line/pending/\$line1
+                                            done
+                                      fi
+                                fi      
+                            done
+                        """
+                    }
+                }
+            }
+        }
+    }
+    post { 
+        success { 
+            timestamps {
+                script{ 
+                    archive "filesRemoved.txt"
+                }  
+            }   
+        }
+        failure {
+            timestamps {
+               step([$class: 'ClaimPublisher'])
+               script{ 
+                   print 'failed'
+                   archive "filesRemoved.txt"
+               }    
+            }    
+        }
+        aborted {
+            timestamps {
+               step([$class: 'ClaimPublisher'])
+               script{ 
+                  print "build aborted"
+                  archive "filesRemoved.txt"
+               }    
+            }    
+        }         
+    }     
+}
