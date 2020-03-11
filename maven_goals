@@ -1,0 +1,28 @@
+-X
+deploy:deploy-file
+-Durl=http://nexus.intuit.net/nexus/content/repositories/SBG.QBO.Intuit-Snapshots/
+-DrepositoryId=snapshots
+-DgroupId=com.intuit.sbg.tern
+-DartifactId=Supportability
+-Dversion=${BUILD_NUMBER}-SNAPSHOT
+-Dpackaging=war
+-Dfile=${WORKSPACE}/CloudLoggingServiceWar/target/Supportability.war
+
+
+####################################################
+-X
+deploy:deploy-file
+-Durl=http://nexus.intuit.net/nexus/content/repositories/SBG.QBO.Intuit-Releases/
+-DrepositoryId=releases
+-DgroupId=com.intuit.sbg.tern
+-DartifactId=SupportabilityRelease
+-Dversion=${BUILD_NUMBER}
+-Dpackaging=war
+-Dfile=${WORKSPACE}/CloudLoggingServiceWar/target/Supportability.war
+
+
+
+###################################################################
+
+mvn -s settings.xml -X deploy:deploy-file -Durl=http://nexus.intuit.net/nexus/content/repositories/SBG.QBO.Intuit-Snapshots/ -DrepositoryId=scm.dev.snap.repo -DgroupId=com.intuit.sbg.tern -DartifactId=segmentor -Dversion=${BUILD_NUMBER}-SNAPSHOT -Dpackaging=war -Dfile=${WORKSPACE}/target/segmentor.war
+mvn -s settings.xml -X deploy:deploy-file -Durl=http://nexus.intuit.net/nexus/content/repositories/SBG.QBO.Intuit-Releases/ -DrepositoryId=scm.dev.snap.repo -DgroupId=com.intuit.sbg.tern -DartifactId=segmentorRelease -Dversion=${BUILD_NUMBER} -Dpackaging=war -Dfile=${WORKSPACE}/target/segmentor.war
