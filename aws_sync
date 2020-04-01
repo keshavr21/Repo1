@@ -1,0 +1,16 @@
+call c:\bldinfo\map_server.bat
+
+net use J: /delete
+
+net use J: \\indfsqbscm01\scmdev\Build
+
+@echo off
+echo list = %RELEASE_VERSION%
+for %%a in (%RELEASE_VERSION:,= %) do (
+   echo name is %%a
+   cd /d J:\%%a\pending
+   for /d %%i in (*.Release.Candidate) do (
+                echo %%i
+               aws s3 sync %%i s3://qbdt-build-artifacts/SCMDEV/build/%%a/pending/%%i
+              )
+)
