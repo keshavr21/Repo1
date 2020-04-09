@@ -1,0 +1,53 @@
+
+
+pipeline{
+    agent {label "Bansaira"}
+    environment{
+        ROOT_DIR = "/home/ea/indfsqbscm01/scmdev/Build"
+    }
+    stages{
+        stage('Clean BAD builds'){
+            steps{
+                timestamps{
+                    script{
+                        sh """
+                            echo> filesRemoved.txt
+                            find ${ROOT_DIR} -maxdepth 3 -name "*.bad" -type d | while read line
+                            do
+                              echo \$line >> filesRemoved.txt
+                              sudo rm -rf \$line
+                            done                        
+                        """
+                    }
+                }
+            }
+        }
+    }
+    post { 
+        success { 
+            timestamps {
+                script{ 
+                    archive "filesRemoved.txt"
+                }  
+            }   
+        }
+        failure {
+            timestamps {
+               step([$class: 'ClaimPublisher'])
+               script{ 
+                   print 'failed'
+                   archive "filesRemoved.txt"
+               }    
+            }    
+        }
+        aborted {
+            timestamps {
+               step([$class: 'ClaimPublisher'])
+               script{ 
+                  print "build aborted"
+                  archive "filesRemoved.txt"
+               }    
+            }    
+        }         
+    }     
+}
