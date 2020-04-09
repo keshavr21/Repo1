@@ -1,0 +1,110 @@
+COUNTRIES = ['US', 'UK', 'CA']
+LATEST_DIRS_TO_KEEP = 10
+
+def clean(dirName, diffCount, country, type){
+    dirNames = sh(label: '', returnStdout: true, script: "ls -lrt ${dirName}|grep '^d'|awk '{print \$NF}'|egrep -vi \"${DO_NOT_REMOVE_PATTERN}\"|grep ${country}| grep ${type}|head -${diffCount} | tr -s '\n' ' '").trim().split().sort()
+    for(looper = 0; looper < dirNames.size(); looper++){
+        //echo "${dirName}/${dirNames[looper]}"
+        sh  label: '', 
+            returnStatus: true, 
+            script: """
+               echo ${dirName}/${dirNames[looper]} >> filesRemoved.txt
+               sudo rm -rf ${dirName}/${dirNames[looper]}
+            """
+        // sudo rm -rf ${dirName}/${dirNames[looper]}
+    }    
+    echo "++++++++++++++++++++++++++++++ END ++++++++++++++++++++++++++++++++++++++"
+}
+
+
+def getTotalFileCountByCountryName(dirName, country, type){
+    count = sh(label: '', 
+            returnStdout: true, 
+            script: """
+                    if [ -d ${dirName} ]
+                    then
+                        ls -lrt ${dirName}|grep '^d'|egrep -vi \"${DO_NOT_REMOVE_PATTERN}\"|grep ${country}|grep ${type}|wc -l
+                    else
+                        echo 0
+                    fi
+                """).trim() as Integer
+    return count
+}
+
+ 
+def startCleanup(dirName, type){
+    for(counter = 0; counter < COUNTRIES.size(); counter++){
+        totalFileCount = getTotalFileCountByCountryName(dirName, COUNTRIES[counter], type) as Integer
+        if(totalFileCount > LATEST_DIRS_TO_KEEP){
+            diffCount = (totalFileCount - LATEST_DIRS_TO_KEEP)
+            echo "++++++++++++++++++++  START REMOVING FILES ++++++++++++++++++++++++++++++++"
+            echo "totalFiles : ${totalFileCount} || removing :: ${diffCount} files || directory :: ${dirName} || country :: ${COUNTRIES[counter]} "
+            clean(dirName, diffCount, COUNTRIES[counter], type)
+        }
+    }
+}
+
+def start(dirList){
+    for(index=0; index < dirList.size(); index++){
+        dirName = dirList[index]
+        // function call to clean PFTW directory for a release
+        startCleanup("${ROOT_DIR}/${dirName}/PFTW", 'nb')
+        startCleanup("${ROOT_DIR}/${dirName}/PFTW", 'db')
+       // function call to clean pending directory for a release
+        startCleanup("${ROOT_DIR}/${dirName}/pending", 'nb')
+        startCleanup("${ROOT_DIR}/${dirName}/pending", 'db')
+        // function call to clean Patch directory for a release
+        startCleanup("${ROOT_DIR}/${dirName}/Patch/Test", 'nb')
+    }    
+}
+
+pipeline{
+    agent {label "Bansaira"}
+    environment{
+        ROOT_DIR = "/home/ea/indfsqbscm01/scmdev/Build"
+        DO_NOT_REMOVE_PATTERN = '.FULL|.SAVE|.RN|.ALPHA|.BETA|.ULIP|.Release.Candidate'
+    }
+    stages{
+        stage('Get Dirs'){
+            steps{
+                timestamps{
+                    script{
+                        sh "echo> filesRemoved.txt"
+                        dirList = sh(label: '', returnStdout: true, script: "ls -lrt ${ROOT_DIR} |grep '^d'|awk '{print \$NF}'| tr -s '\n' ' ' ").trim().split().sort()
+                        stage('Do the cleanup'){
+                            start(dirList)
+                        }
+                    }
+                }
+            }
+        }
+    }
+    post { 
+        success { 
+            timestamps {
+                script{ 
+                    //print "success"
+                    archive "filesRemoved.txt"
+                }  
+            }   
+        }
+        failure {
+            timestamps {
+               step([$class: 'ClaimPublisher'])
+               script{ 
+                   print 'failed'
+                   archive "filesRemoved.txt"
+               }    
+            }    
+        }
+        aborted {
+            timestamps {
+               step([$class: 'ClaimPublisher'])
+               script{ 
+                  print "build aborted"
+                  archive "filesRemoved.txt"
+               }    
+            }    
+        }         
+    }     
+}
