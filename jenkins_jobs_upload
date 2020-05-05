@@ -1,5 +1,5 @@
-export SOURCE_JENKINS_URL="https://ind-qbdt-jenkins.corp.intuit.net:8080"
-export IBP2_JENKINS_URL="https://build.intuit.com/qbdt-jenkins"
+export SOURCE_JENKINS_URL=""
+export DEST_JENKINS_URL=""
 
 for job_name in ${IDC_LAB_JOB_LIST}
 do
