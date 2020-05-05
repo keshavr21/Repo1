@@ -1,0 +1,17 @@
+export SOURCE_JENKINS_URL="https://ind-qbdt-jenkins.corp.intuit.net:8080"
+export IBP2_JENKINS_URL="https://build.intuit.com/qbdt-jenkins"
+
+for job_name in ${IDC_LAB_JOB_LIST}
+do
+   job_config_file=config.xml
+   
+   if [ -f ${job_config_file} ]
+   then
+       rm -rf ${job_config_file}
+   fi
+   
+   curl -k -u "${SUSER}:${SPWD}" "${SOURCE_JENKINS_URL}/job/${job_name}/config.xml" -o config.xml
+   ls -lrt config.xml
+   curl -k  -XPOST "${IBP2_JENKINS_URL}/createItem?name=${job_name}" -u "${JUSERNAME}:${JPASSWORD}" --data-binary @./config.xml -H "Content-Type:text/xml"
+ 
+done
