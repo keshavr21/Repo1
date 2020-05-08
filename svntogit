@@ -1,0 +1,6 @@
+git svn init url/trunk . --username=
+git reset --soft refs/remotes/git-svn
+git svn fetch 
+
+git remote add
+git push
