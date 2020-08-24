@@ -6,3 +6,7 @@ or add /etc/resolv.conf
 if authtication issue
 
 git config http.sslVerify false
+
+
+git latest version
+https://stackoverflow.com/questions/21820715/how-to-install-latest-version-of-git-on-centos-7-x-6-x
