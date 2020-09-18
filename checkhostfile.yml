@@ -1,0 +1,15 @@
+---
+- hosts: all
+  gather_facts: no
+  tasks:
+    - name: to check number of character in hostname
+      shell: echo $HOSTNAME |  wc -c
+      register: result
+
+    - fail:
+        msg: hostname
+      when: result.stdout|int >= 15
+
+
+
+    - debug: var=result.stdout
