@@ -1,0 +1,91 @@
+/**
+  ************************************************************************************************************************
+  * Purpose: To generate QBDT-SDK builds
+  * Author :  Sujata Behra
+  * Job URL: https://build.intuit.com/qbdt-jenkins/job/QBDT-SDK
+ 
+  ************************************************************************************************************************
+**/
+
+
+build_label = "SDK"
+def buildNumber = currentBuild.number
+
+def cleanUp(){
+    stage('Clean Up'){
+        ws("C:\\"){
+            dir('QBDT-SDK'){
+                deleteDir()
+            }
+            
+        }
+    }
+}
+
+def checkoutRepo(){    
+    stage('Checkout Repo') { 
+         ws("C:\\") {
+         checkout changelog: false, poll: false, scm: [$class: 'GitSCM', branches: [[name: 'master']], doGenerateSubmoduleConfigurations: false, extensions: [[$class: 'RelativeTargetDirectory', relativeTargetDir: 'QBDT-SDK']], submoduleCfg: [], userRemoteConfigs: [[credentialsId: 'scm_github_token', url: 'https://github.intuit.com/QuickBooksDesktop/QBDT-SDK.git']]]
+       bat '''
+       dir
+          '''
+	}
+   }	
+}	
+
+def mapWindowsDrive(){
+    stage('Map Drive'){
+        withCredentials([usernamePassword(credentialsId: 'share-qbdt', passwordVariable: 'NPWD', usernameVariable: 'NUSR')]) {
+            bat """
+                @echo off
+                net use * /delete /y
+                net use Z: \\\\share.sbgqbdt.a.intuit.com\\qbdt-build-artifacts /user:QBDT\\%NUSR% %NPWD%
+                git config --global core.longpaths true
+            """
+        }    
+    }
+}
+
+def build(){
+    stage('Build') { 
+    	    bat """
+    	        pushd C:\\
+	            cd C:\\QBDT-SDK\\Common\\build
+	            call doqb.bat
+	            robocopy C:\\QBDT-SDK\\QBSDK\\Install\\executables Z:\\SDK\\QBDT\\${currentBuild.number} /E /MT:48
+	            @echo off
+
+    	    """
+        }
+}
+
+pipeline {
+    agent { label build_label }
+    stages {
+        stage("Start") {
+            steps {
+                script {
+                    timestamps {
+                        cleanUp()
+                        mapWindowsDrive()
+                        checkoutRepo()
+                        build()
+                    }
+                }
+            }
+        }
+   
+    }
+    
+    post {
+        always {
+            println("always")
+        }
+        failure {
+            script {
+                echo "Failure"
+            }
+        }
+
+    }
+}
