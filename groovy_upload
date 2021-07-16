@@ -1,0 +1,512 @@
+/**
+  ************************************************************************************************************************
+  * Script Name : 
+  * Purpose : 
+  * Utility URL : 
+  * Copyright : 
+  ************************************************************************************************************************
+**/
+
+BUILD_NAME = "${COUNTRY}_${RELEASE_NUMBER}_${RC_BUILD_NUMBER}"
+if("${RELEASE_NUMBER}" =~ "PG"){
+   BUILD_NAME = "${COUNTRY}_P${RC_BUILD_NUMBER}"
+}
+
+release_number_lowercase = "${RELEASE_NUMBER}".toLowerCase()
+BUILD_FOLDER_SUFFIX="${RELEASE_NUMBER}"
+ENCODED_PATH_VALUE="${ENCRYPTED_STRING}${COUNTRY}_${RELEASE_NUMBER}"
+ENCODED_NON_USA_PATH_VALUE="${ENCRYPTED_STRING}${release_number_lowercase}"
+if("${RELEASE_NUMBER}" == "B1"){
+    BUILD_FOLDER_SUFFIX="Beta1"
+    ENCODED_PATH_VALUE="${ENCRYPTED_STRING}${BUILD_FOLDER_SUFFIX}"
+    ENCODED_NON_USA_PATH_VALUE="${ENCRYPTED_STRING}${BUILD_FOLDER_SUFFIX}"
+}else if("${RELEASE_NUMBER}" == "B2"){
+    BUILD_FOLDER_SUFFIX="Beta2"
+    ENCODED_PATH_VALUE="${ENCRYPTED_STRING}${BUILD_FOLDER_SUFFIX}"
+    ENCODED_NON_USA_PATH_VALUE="${ENCRYPTED_STRING}${BUILD_FOLDER_SUFFIX}"
+}
+
+PFTW_PATH = "Z:\\SCMDEV\\build\\${QBDT_RELEASE}${BUILD_FOLDER_SUFFIX}\\PFTW\\${BUILD_NAME}.1.nb\\output"
+TRL_PFTW_PATH = "Z:\\SCMDEV\\build\\${QBDT_RELEASE}${BUILD_FOLDER_SUFFIX}Trl\\PFTW\\${BUILD_NAME}trl.1.nb\\output"
+WEBPATCH_PATH = "Z:\\SCMDEV\\build\\${QBDT_RELEASE}${BUILD_FOLDER_SUFFIX}\\Patch\\Test\\${BUILD_NAME}.1.nb\\${RC_PATCH_NUMBER}"
+
+if("${BUILD_BIT_TYPE}" == "32BIT"){
+     PFTW_PATH = "Z:\\SCMDEV\\build\\32bit_${QBDT_RELEASE}${BUILD_FOLDER_SUFFIX}\\PFTW\\${BUILD_NAME}.1.nb\\output"
+     TRL_PFTW_PATH = "Z:\\SCMDEV\\build\\32bit_${QBDT_RELEASE}${BUILD_FOLDER_SUFFIX}Trl\\PFTW\\${BUILD_NAME}trl.1.nb\\output"
+     WEBPATCH_PATH = "Z:\\SCMDEV\\build\\32bit_${QBDT_RELEASE}${BUILD_FOLDER_SUFFIX}\\Patch\\Test\\${BUILD_NAME}.1.nb\\${RC_PATCH_NUMBER}"
+}else if("${BUILD_BIT_TYPE}" == "64BIT"){
+     PFTW_PATH = "Z:\\SCMDEV\\build\\64bit_${QBDT_RELEASE}${BUILD_FOLDER_SUFFIX}\\PFTW\\${BUILD_NAME}.1.nb\\output"
+     TRL_PFTW_PATH = "Z:\\SCMDEV\\build\\64bit_${QBDT_RELEASE}${BUILD_FOLDER_SUFFIX}Trl\\PFTW\\${BUILD_NAME}trl.1.nb\\output"
+     WEBPATCH_PATH = "Z:\\SCMDEV\\build\\64bit_${QBDT_RELEASE}${BUILD_FOLDER_SUFFIX}\\Patch\\Test\\${BUILD_NAME}.1.nb\\${RC_PATCH_NUMBER}"
+}
+
+DLM_AKAMAI_ROOT_PATH = "/39389/SBD/QuickBooks"
+PFTW_AKAMAI_ROOT_PATH = "/16751/http.intuit/Downloads"
+DLM_AKAMAI_PATH = ""
+PFTW_AKAMAI_PATH = ""
+WEBPATCH_AKAMAI_PATH =""
+project_json_file = "SCM\\tools\\global\\lib\\python\\qbdt.git.project.info.json"
+project_version = ""
+project_year = ""
+TOOL_EXE = "SCM\\tools\\global\\psftp.exe"
+PPK_FILE = "SCM\\tools\\inhouse\\Akamai\\updateEstore\\id_rsa_qbdt.ppk"
+FILE1 = ""
+FILE2 = ""
+FILE3 = ""
+FILE4 = ""
+FILE5 = ""
+FILE6 = ""
+FILE7 = ""
+DEST_FILE1 = ""
+DEST_FILE2 = ""
+DEST_FILE3 = ""
+DEST_FILE4 = ""
+DEST_FILE5 = ""
+DEST_FILE6 = ""
+DEST_FILE7 = ""
+non_us_project_version = ""
+
+
+if("${COUNTRY}" != "US"){
+    DLM_AKAMAI_ROOT_PATH = "/downloads/${COUNTRY}/QuickBooks" 
+    PPK_FILE = "SCM\\tools\\inhouse\\Akamai\\updateEstore\\id_rsa_singa.ppk"
+}
+
+def setBuildDescription(){
+    currentBuild.description = "[${QBDT_RELEASE}${RELEASE_NUMBER}] [${COUNTRY}] [${RELEASE_NUMBER}_${RC_BUILD_NUMBER}] [${UPLOAD_TYPE}] [${BUILD_BIT_TYPE}]"
+}
+
+def validateInputs(){
+    if("${BUILD_BIT_TYPE}" == "select"){
+        error "Invalid BUILD_BIT_TYPE value, kindly rerun with a valid value .... exiting ....."
+    }else if("${QBDT_RELEASE}" == "select"){
+        error "Invalid QBDT_RELEASE value, kindly rerun with a valid value .... exiting ....."
+    }else if("${RELEASE_NUMBER}" == "select"){
+        error "Invalid RELEASE_NUMBER value, kindly rerun with a valid value .... exiting ....."    
+    }else if("${COUNTRY}" == "select"){ 
+        error "Invalid COUNTRY value, kindly rerun with a valid value .... exiting ....."    
+    }else if(! "${RC_BUILD_NUMBER}"){ 
+        error "Invalid RC_BUILD_NUMBER value, kindly rerun with a valid value .... exiting ....."    
+    }else if(! "${ENCRYPTED_STRING}"){
+        error "Invalid ENCRYPTED_STRING value, kindly rerun with a valid value .... exiting ....."    
+    }else if("${UPLOAD_TYPE}" == "BOTH" || "${UPLOAD_TYPE}" == "WebPatch"){
+        if(! "${RC_PATCH_NUMBER}"){
+            error "Invalid RC_PATCH_NUMBER value, kindly rerun with a valid value .... exiting ....."    
+        }else if("${COUNTRY}" != "US" && ! ("${UK_CA_RC_PATCH_NAME_STRING}")){
+            error "Invalid UK_CA_RC_PATCH_NAME_STRING value for ${COUNTRY} WebPatch upload, kindly rerun with a valid value .... exiting ....."    
+        }
+    }
+}
+
+def map_drive(){
+    stage('Map Drive'){
+        withCredentials([usernamePassword(credentialsId: 'share-qbdt', passwordVariable: 'NPWD', usernameVariable: 'NUSR')]) {
+            bat """
+                echo off
+                net use * /delete /y
+                net use Z: \\\\share.sbgqbdt.a.intuit.com\\qbdt-build-artifacts /user:QBDT\\%NUSR% %NPWD%    
+            """
+        }    
+    }
+}
+
+def check_if_source_pftw_path_exists(){
+    stage("Check if Source PFTW/DLM/WebPatch Exists"){
+        bat """
+            echo off
+            if not exist ${PFTW_PATH} (
+               echo on
+               echo "Source PFTW Path ${PFTW_PATH} does not exists, please check and rerun ..... exiting ....."
+               exit 1
+            )
+
+            if not exist ${TRL_PFTW_PATH} (
+               echo on
+               echo "Source trial PFTW Path ${TRL_PFTW_PATH} does not exists, please check and rerun ..... exiting ....."
+               exit 2
+            )        
+        """
+        
+        if("${RC_PATCH_NUMBER}"){
+            bat """
+                if not exist ${WEBPATCH_PATH} (
+                    echo on
+                    echo "Source WebPatch Path ${WEBPATCH_PATH} does not exists, please check and rerun ..... exiting ....."
+                    exit 3
+                )
+            """
+        }
+    }
+}
+
+def checkout_scm(){
+    stage("Checkout SCM"){
+        checkout changelog: false, poll: false, scm: [$class: 'GitSCM', branches: [[name: 'ibp2']], doGenerateSubmoduleConfigurations: false, extensions: [[$class: 'CloneOption', depth: 1, noTags: true, reference: '', shallow: true], [$class: 'RelativeTargetDirectory', relativeTargetDir: 'SCM']], submoduleCfg: [], userRemoteConfigs: [[credentialsId: 'scm_github_token', url: 'https://github.intuit.com/QuickBooksDesktop/SCM']]] 
+    }
+}
+
+def set_project_year_n_version(){
+    stage("Set Project Year N Version"){
+        projectJson = readJSON file: project_json_file
+        version = projectJson["${QBDT_RELEASE}".toLowerCase()]["version"] as Integer
+        project_version = version - 10
+        if("${COUNTRY}" != "US"){
+            non_us_project_version = version
+        }    
+        project_year = projectJson["${QBDT_RELEASE}".toLowerCase()]["year"]
+        if(!(project_version || project_year)){
+            error "project_year and project_version not set, please check and rerun ... exiting ...."
+        }
+        
+        echo """
+            Project Version : ${project_version}
+            Project Year : ${project_year}
+        """
+        if("${COUNTRY}" == "US"){
+            FILE1 = "QuickBooksReinstallSub${project_year}.exe"
+            FILE2 = "QuickBooksProSub${project_year}.exe"
+            FILE3 = "QuickBooksPro${project_year}.exe"
+            FILE4 = "QuickBooksPremierSub${project_year}.exe"
+            FILE5 = "QuickBooksPremier${project_year}.exe"
+            FILE6 = "QuickBooksEnterprise${project_version}Trial.exe"
+            FILE7 = "QuickBooksEnterprise${project_version}.exe"
+        }else if("${COUNTRY}" == "UK"){
+            FILE1 = "QuickBooks${COUNTRY}PremierAcct${project_year}Trial.exe"
+            FILE2 = "QuickBooks${COUNTRY}${project_year}.exe"
+            FILE3 = "QuickBooks${COUNTRY}PremierAcctPayroll${project_year}Trial.exe"
+            FILE4 = "QuickBooks${COUNTRY}Premier${project_year}Trial.exe"
+            FILE5 = "QuickBooks${COUNTRY}${project_year}Trial.exe"
+        }else if("${COUNTRY}" == "CA"){
+            FILE1 = "QuickBooks${COUNTRY}Enterprise${project_version}.exe"
+            FILE2 = "QuickBooks${COUNTRY}${project_year}.exe"
+            FILE3 = "QuickBooks${COUNTRY}PremierAcct${project_year}Trial.exe"
+            FILE4 = "QuickBooks${COUNTRY}Premier${project_year}Trial.exe"
+            FILE5 = "QuickBooks${COUNTRY}${project_year}Trial.exe"
+            FILE6 = "QuickBooks${COUNTRY}Enterprise${project_version}Trial.exe"
+            FILE7 = "QuickBooks${COUNTRY}EnterpriseSU${project_version}Trial.exe"            
+        }
+
+         if("${BUILD_BIT_TYPE}" == "32BIT") {
+             DEST_FILE1 = FILE1.replace('.exe','_x32.exe')
+             DEST_FILE2 = FILE2.replace('.exe','_x32.exe')
+             DEST_FILE3 = FILE3.replace('.exe','_x32.exe')
+             DEST_FILE4 = FILE4.replace('.exe','_x32.exe')
+             DEST_FILE5 = FILE5.replace('.exe','_x32.exe')
+             if("${COUNTRY}" != "UK"){
+                DEST_FILE6 = FILE6.replace('.exe','_x32.exe')
+                DEST_FILE7 = FILE7.replace('.exe','_x32.exe')
+             }
+         }        
+    }    
+}
+
+def set_akamai_upload_path(){
+    stage("Set Akamai Upload Path"){        
+        DLM_AKAMAI_PATH = "${DLM_AKAMAI_ROOT_PATH}/${project_year}/${ENCODED_PATH_VALUE}"
+        PFTW_AKAMAI_PATH = "${PFTW_AKAMAI_ROOT_PATH}/${project_year}/${ENCODED_PATH_VALUE}"
+        WEBPATCH_AKAMAI_PATH = "${PFTW_AKAMAI_ROOT_PATH}/${project_year}/${ENCODED_PATH_VALUE}/Webpatch" 
+        
+        //if("${BUILD_BIT_TYPE}" == "64BIT"){
+        //     DLM_AKAMAI_PATH = "${DLM_AKAMAI_ROOT_PATH}/${project_year}/${ENCRYPTED_STRING}${COUNTRY}_${RELEASE_NUMBER}_x64"
+        //     PFTW_AKAMAI_PATH = "${PFTW_AKAMAI_ROOT_PATH}/${project_year}/${ENCRYPTED_STRING}${COUNTRY}_${RELEASE_NUMBER}_x64"
+        //     WEBPATCH_AKAMAI_PATH = "${PFTW_AKAMAI_ROOT_PATH}/${project_year}/${ENCRYPTED_STRING}${COUNTRY}_${RELEASE_NUMBER}_x64/Webpatch"         
+        //}
+        //UK: /downloads/UK/QuickBooks/2021/dls/eo2bf393ir4
+        //CA: /downloads/CA/QuickBooks/2021/dls/eo2bf393ir4
+        
+        if("${COUNTRY}" == "US"){
+            echo """
+                DLM Akamai Upload path : ${DLM_AKAMAI_PATH}
+                PFTW Akamai Upload path :  ${PFTW_AKAMAI_PATH}
+                WebPatch Akamai Upload path : ${WEBPATCH_AKAMAI_PATH}
+            """
+        }else{
+            DLM_AKAMAI_PATH = "${DLM_AKAMAI_ROOT_PATH}/${project_year}/dls/${ENCODED_NON_USA_PATH_VALUE}"
+            WEBPATCH_AKAMAI_PATH = "${DLM_AKAMAI_ROOT_PATH}/${project_year}/dls/${ENCODED_NON_USA_PATH_VALUE}"
+            
+            //if("${BUILD_BIT_TYPE}" == "64BIT"){
+            //    DLM_AKAMAI_PATH = "${DLM_AKAMAI_ROOT_PATH}/${project_year}/dls/${ENCRYPTED_STRING}${release_number_lowercase}_x64"
+            //    WEBPATCH_AKAMAI_PATH = "${DLM_AKAMAI_ROOT_PATH}/${project_year}/dls/${ENCRYPTED_STRING}${release_number_lowercase}_x64"            
+            //}
+            
+            echo """
+                PFTW Akamai Upload path : ${DLM_AKAMAI_PATH}
+                WebPatch Akamai Upload path : ${WEBPATCH_AKAMAI_PATH}
+            """            
+        }
+    }
+}
+
+def get_input_files_to_ws(){
+    stage("Copy input files to Workspace"){
+        bat """
+            echo off
+            robocopy ${PFTW_PATH} PFTW *.exe /MT:32
+            set ERRORLEVEL=0
+            robocopy ${TRL_PFTW_PATH} PFTW *.exe /MT:32
+            set ERRORLEVEL=0
+        """
+        
+        if("${RC_PATCH_NUMBER}"){
+            bat """
+               robocopy ${WEBPATCH_PATH}\\STD\\qbwebpatch WEBPATCH *.exe /MT:32
+               set ERRORLEVEL=0
+               robocopy ${WEBPATCH_PATH}\\BEL\\qbwebpatch WEBPATCH *.exe /MT:32
+               set ERRORLEVEL=0
+            """
+        }
+        bat """
+            echo off
+            set PATH=C:\\Program Files\\Git\\usr\\bin;%PATH%
+            chmod -R 777 *
+        """
+    }
+}
+
+def upload_DLM(){
+   stage("Upload DLM to Akamai"){
+       if("${UPLOAD_TYPE}" == "BOTH" || "${UPLOAD_TYPE}" == "PFTW"){     
+            if("${COUNTRY}" == "US"){
+                bat """
+                   echo off
+                   pushd PFTW\\
+                   echo cd "${DLM_AKAMAI_ROOT_PATH}/" > dlm.pm
+                   echo mkdir "${project_year}" >> dlm.pm
+                   echo cd "${DLM_AKAMAI_ROOT_PATH}/${project_year}" >> dlm.pm
+                   echo mkdir "${ENCODED_PATH_VALUE}" >> dlm.pm
+                   echo cd "${DLM_AKAMAI_ROOT_PATH}/${project_year}/${ENCODED_PATH_VALUE}/" >> dlm.pm
+                   if "${BUILD_BIT_TYPE}" == "32BIT" (
+                          echo put "${FILE1}" "${DEST_FILE1}"  >> dlm.pm
+                          echo put "${FILE2}" "${DEST_FILE2}"  >> dlm.pm
+                          echo put "${FILE3}" "${DEST_FILE3}"  >> dlm.pm
+                          echo put "${FILE4}" "${DEST_FILE4}"  >> dlm.pm
+                          echo put "${FILE5}" "${DEST_FILE5}"  >> dlm.pm
+                          echo put "${FILE6}" "${DEST_FILE6}"  >> dlm.pm
+                          echo put "${FILE7}" "${DEST_FILE7}"  >> dlm.pm 
+                   ) else (
+                          echo put "${FILE1}" "${FILE1}"  >> dlm.pm
+                          echo put "${FILE2}" "${FILE2}"  >> dlm.pm
+                          echo put "${FILE3}" "${FILE3}"  >> dlm.pm
+                          echo put "${FILE4}" "${FILE4}"  >> dlm.pm
+                          echo put "${FILE5}" "${FILE5}"  >> dlm.pm
+                          echo put "${FILE6}" "${FILE6}"  >> dlm.pm
+                          echo put "${FILE7}" "${FILE7}"  >> dlm.pm
+                   )
+                   echo quit >> dlm.pm
+                   echo on
+                   ${WORKSPACE}\\${TOOL_EXE} sshacs@intuitdl1.upload.akamai.com -i ${WORKSPACE}\\${PPK_FILE} -b dlm.pm
+                """
+            }else {
+                bat """
+                    echo off
+                    pushd PFTW\\
+                    echo cd "${DLM_AKAMAI_ROOT_PATH}/" > dlm.pm
+                    echo mkdir "${project_year}" >> dlm.pm
+                    echo cd "${DLM_AKAMAI_ROOT_PATH}/${project_year}" >> dlm.pm
+                    echo mkdir "dls" >> dlm.pm
+                    echo cd "${DLM_AKAMAI_ROOT_PATH}/${project_year}/dls" >> dlm.pm
+                    echo mkdir "${ENCODED_NON_USA_PATH_VALUE}" >> dlm.pm
+                    echo cd "${DLM_AKAMAI_ROOT_PATH}/${project_year}/dls/${ENCODED_NON_USA_PATH_VALUE}" >> dlm.pm
+                    if "${BUILD_BIT_TYPE}" == "32BIT" (
+                         echo put "${FILE1}" "${DEST_FILE1}"  >> dlm.pm
+                         echo put "${FILE2}" "${DEST_FILE2}"  >> dlm.pm
+                         if "${COUNTRY}" == "UK" (
+                            if exist "${FILE3}" echo put "${FILE3}" "${DEST_FILE3}"  >> dlm.pm
+                            if exist "${FILE4}" echo put "${FILE4}" "${DEST_FILE4}"  >> dlm.pm
+                            if exist "${FILE5}" echo put "${FILE5}" "${DEST_FILE5}"  >> dlm.pm
+                          )
+
+                         if "${COUNTRY}" == "CA" (
+                             echo put "${FILE3}" "${DEST_FILE3}"  >> dlm.pm
+                             echo put "${FILE4}" "${DEST_FILE4}"  >> dlm.pm
+                             echo put "${FILE5}" "${DEST_FILE5}"  >> dlm.pm
+                             echo put "${FILE6}" "${DEST_FILE6}"  >> dlm.pm
+                             echo put "${FILE7}" "${DEST_FILE7}"  >> dlm.pm                       
+                         )                   
+                    ) else (
+                         echo put "${FILE1}" "${FILE1}"  >> dlm.pm
+                         echo put "${FILE2}" "${FILE2}"  >> dlm.pm
+                         if "${COUNTRY}" == "UK" (
+                            if exist "${FILE3}" echo put "${FILE3}" "${FILE3}"  >> dlm.pm
+                            if exist "${FILE4}" echo put "${FILE4}" "${FILE4}"  >> dlm.pm
+                            if exist "${FILE5}" echo put "${FILE5}" "${FILE5}"  >> dlm.pm
+                          )
+
+                         if "${COUNTRY}" == "CA" (
+                             echo put "${FILE3}" "${FILE3}"  >> dlm.pm
+                             echo put "${FILE4}" "${FILE4}"  >> dlm.pm
+                             echo put "${FILE5}" "${FILE5}"  >> dlm.pm
+                             echo put "${FILE6}" "${FILE6}"  >> dlm.pm
+                             echo put "${FILE7}" "${FILE7}"  >> dlm.pm                       
+                         )
+                    )
+                    echo quit >> dlm.pm
+                    echo on
+                    ${WORKSPACE}\\${TOOL_EXE} sshacs@intuitsinga.ssh.upload.akamai.com -i ${WORKSPACE}\\${PPK_FILE} -b dlm.pm
+                """
+            }
+       }
+    }    
+}
+
+def upload_PFTW(){
+    stage("Upload PFTW to Akamai"){
+        if("${UPLOAD_TYPE}" == "BOTH" || "${UPLOAD_TYPE}" == "PFTW"){
+            if("${COUNTRY}" == "US"){
+                bat """
+                   pushd PFTW\\
+                   echo off
+                   echo cd "${PFTW_AKAMAI_ROOT_PATH}/" > pftw.pm
+                   echo mkdir "${project_year}" >> pftw.pm
+                   echo cd "${PFTW_AKAMAI_ROOT_PATH}/${project_year}/" >> pftw.pm
+                   echo mkdir "${ENCODED_PATH_VALUE}" >> pftw.pm
+                   echo cd "${PFTW_AKAMAI_ROOT_PATH}/${project_year}/${ENCODED_PATH_VALUE}/" >> pftw.pm
+                   if "${BUILD_BIT_TYPE}" == "32BIT" (
+                        echo put "${FILE1}" "Setup_${DEST_FILE1}"  >> pftw.pm
+                        echo put "${FILE2}" "Setup_${DEST_FILE2}"  >> pftw.pm
+                        echo put "${FILE3}" "Setup_${DEST_FILE3}"  >> pftw.pm
+                        echo put "${FILE4}" "Setup_${DEST_FILE4}"  >> pftw.pm
+                        echo put "${FILE5}" "Setup_${DEST_FILE5}"  >> pftw.pm
+                        echo put "${FILE6}" "Setup_${DEST_FILE6}"  >> pftw.pm
+                        echo put "${FILE7}" "Setup_${DEST_FILE7}"  >> pftw.pm                  
+                   ) else (
+                        echo put "${FILE1}" "Setup_${FILE1}"  >> pftw.pm
+                        echo put "${FILE2}" "Setup_${FILE2}"  >> pftw.pm
+                        echo put "${FILE3}" "Setup_${FILE3}"  >> pftw.pm
+                        echo put "${FILE4}" "Setup_${FILE4}"  >> pftw.pm
+                        echo put "${FILE5}" "Setup_${FILE5}"  >> pftw.pm
+                        echo put "${FILE6}" "Setup_${FILE6}"  >> pftw.pm
+                        echo put "${FILE7}" "Setup_${FILE7}"  >> pftw.pm
+                   )
+                   echo quit >> pftw.pm
+                   echo on
+                   ${WORKSPACE}\\${TOOL_EXE} sshacs@intuitdl1.upload.akamai.com -i ${WORKSPACE}\\${PPK_FILE} -b pftw.pm
+                """
+            }
+        }
+    }
+}
+
+def upload_WEBPATCH(){
+    stage("Upload WebPatch to Akamai"){
+        if("${UPLOAD_TYPE}" == "BOTH" || "${UPLOAD_TYPE}" == "WebPatch"){
+            if("${COUNTRY}" == "US"){
+                bat """
+                    echo off
+                    pushd WEBPATCH\\
+                    echo cd "${PFTW_AKAMAI_ROOT_PATH}/" > webpatch.pm
+                    echo mkdir "${project_year}" >> webpatch.pm
+                    echo cd "${PFTW_AKAMAI_ROOT_PATH}/${project_year}/" >> webpatch.pm
+                    echo mkdir "${ENCODED_PATH_VALUE}" >> webpatch.pm
+                    echo cd "${PFTW_AKAMAI_ROOT_PATH}/${project_year}/${ENCODED_PATH_VALUE}/" >> webpatch.pm
+                    echo mkdir "Webpatch" >> webpatch.pm
+                    echo cd "${PFTW_AKAMAI_ROOT_PATH}/${project_year}/${ENCODED_PATH_VALUE}/Webpatch/" >> webpatch.pm
+                    if "${BUILD_BIT_TYPE}" == "32BIT" (
+                         echo put "qbwebpatch.exe" "qbwebpatch_x32.exe"  >> webpatch.pm
+                         echo put "en_qbwebpatch.exe" "en_qbwebpatch_x32.exe"  >> webpatch.pm                    
+                    ) else (
+                         echo put "qbwebpatch.exe" "qbwebpatch.exe"  >> webpatch.pm
+                         echo put "en_qbwebpatch.exe" "en_qbwebpatch.exe"  >> webpatch.pm
+                    )
+                    echo quit >> webpatch.pm
+                    echo on
+                    ${WORKSPACE}\\${TOOL_EXE} sshacs@intuitdl1.upload.akamai.com -i ${WORKSPACE}\\${PPK_FILE} -b webpatch.pm
+                """
+            }else{
+                bat """
+                    echo off
+                    pushd WEBPATCH\\
+                    echo cd "${DLM_AKAMAI_ROOT_PATH}/" > webpatch.pm
+                    echo mkdir "${project_year}" >> webpatch.pm
+                    echo cd "${DLM_AKAMAI_ROOT_PATH}/${project_year}" >> webpatch.pm
+                    echo mkdir "dls" >> webpatch.pm
+                    echo cd "${DLM_AKAMAI_ROOT_PATH}/${project_year}/dls" >> webpatch.pm
+                    echo mkdir "${ENCODED_NON_USA_PATH_VALUE}" >> webpatch.pm
+                    echo cd "${DLM_AKAMAI_ROOT_PATH}/${project_year}/dls/${ENCODED_NON_USA_PATH_VALUE}" >> webpatch.pm
+                    if "${BUILD_BIT_TYPE}" == "32BIT" (
+                         echo put "qbwebpatch.exe" "Update${non_us_project_version}0${release_number_lowercase}_${UK_CA_RC_PATCH_NAME_STRING}_en_STD_x32.exe"  >> webpatch.pm
+                         if "${COUNTRY}" == "CA" (
+                             echo put "en_qbwebpatch.exe" "Update${non_us_project_version}0${release_number_lowercase}_${UK_CA_RC_PATCH_NAME_STRING}_en_ENT_x32.exe"  >> webpatch.pm
+                         )                 
+                    ) else (
+                         echo put "qbwebpatch.exe" "Update${non_us_project_version}0${release_number_lowercase}_${UK_CA_RC_PATCH_NAME_STRING}_en_STD.exe"  >> webpatch.pm
+                         if "${COUNTRY}" == "CA" (
+                             echo put "en_qbwebpatch.exe" "Update${non_us_project_version}0${release_number_lowercase}_${UK_CA_RC_PATCH_NAME_STRING}_en_ENT.exe"  >> webpatch.pm
+                         )
+                    )
+                    echo quit >> webpatch.pm
+                    echo on
+                    ${WORKSPACE}\\${TOOL_EXE} sshacs@intuitsinga.ssh.upload.akamai.com -i ${WORKSPACE}\\${PPK_FILE} -b webpatch.pm
+                """
+            }
+        }    
+    }
+}
+
+def upload_to_akamai(){
+    parallel(
+        dlm: { upload_DLM() },
+        pftw: { upload_PFTW() },
+        wp: { upload_WEBPATCH() }
+    )
+}
+
+def clean_ws(){
+    stage("Clean WS"){
+        bat """
+            echo off
+            if exist PFTW rd /s /q PFTW
+            if exist WEBPATCH rd /s /q WEBPATCH
+            if exist SCM RD /s /q SCM
+        """
+    }
+}
+
+def enable_cache_purge(){
+    stage("Enable Cache Purge"){
+        build wait: false, propagate: false, job: 'purge-akamai-cache-for-directory-upload', parameters: [string(name: 'PROJECT_BUILD_URL', value: "${BUILD_URL}")]
+    }
+}
+
+pipeline {
+    agent {label "qbdt"}
+    stages {
+        stage("Validate Inputs") {
+            steps {
+                script {
+                    timestamps {
+                        validateInputs()
+                        map_drive()
+                        check_if_source_pftw_path_exists()
+                        clean_ws()
+                        checkout_scm()
+                        set_project_year_n_version()
+                        set_akamai_upload_path()
+                        get_input_files_to_ws()
+                        upload_to_akamai()
+                        enable_cache_purge()
+                    }
+                }
+            }
+        }
+   
+    }
+    
+    post {
+        always {
+            println("always")
+            setBuildDescription()
+            clean_ws()
+        }
+        failure {
+            script {
+                echo "Failure"
+            }
+        }
+        success {
+            script {
+                echo "Success"
+            }
+        }
+    }
+}
