@@ -2,3 +2,5 @@ aws s3 ls
 An error occurred (RequestTimeTooSkewed) when calling the ListBuckets operation: The difference between the request time and the current time is too large.
 
 sudo ntpdate -u in.pool.ntp.org
+
+https://github.com/zealvora/terraform-beginner-to-advanced-resource
